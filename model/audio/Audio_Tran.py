@@ -4,8 +4,11 @@ from torch import nn
 import sys
 import os
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+project_root = os.path.dirname(project_root)
+
 sys.path.append(project_root)
-from  dataset.clip.voice_data import get_audio
+print(project_root)
+from dataset.clip.voice_data import get_audio
 from util import mfcc_eval
 
 
@@ -20,7 +23,6 @@ class Audio_Tran(nn.Module):
         self.dropout = dropout
         self.encoder_layer = nn.TransformerEncoderLayer(d_model=self.audio_feature, nhead=self.num_heads, dropout= self.dropout,batch_first=True)
         self.transformer_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=self.num_layers)
-
         self.fc = nn.Linear(self.audio_feature, self.hidden_size)
         # Dropout 层用于防止过拟合
         self.dropout = nn.Dropout(dropout)

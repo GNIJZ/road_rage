@@ -38,6 +38,7 @@ def get_audio(path,sr,start_frame,end_frame):
     end_audio=int(end_frame*sr)
     return y[start_audio:end_audio]
 
+
 if __name__ == '__main__':
     audio_data = np.random.rand(16000 * 20)  # 示例：10秒的随机数据
 
