@@ -9,7 +9,7 @@ def tcp_test():
     client_socket.connect((server_ip, server_port))
     while True:
         client_socket.send("12345".encode('utf-8'))
-        time.sleep(0.01)
+
 
 
 def tcp_calc():

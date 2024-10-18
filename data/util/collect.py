@@ -76,6 +76,7 @@ class AudioCollector:
                 break  # 如果发生错误，退出循环
 
     def stop(self):
+        self.save_event.clear()  # 确保事件被清除，停止读取
         self.stream.stop_stream()
         self.stream.close()
         self.p.terminate()
@@ -131,12 +132,27 @@ class CollectSilab:
 
 #原始tcp接收代码
 class CollectSilab:
+    # 平均取数
+    """
+    savedata方法中的可能需要的平均取10帧：
+        groups = [data[i:i + 15] for i in range(0, len(data), 15)]
+        # 如果总组数少于10个，直接返回所有组
+        if len(groups) <= 10:
+            return groups
+        # 计算每个选择的数据组的间隔
+        interval = len(groups) // 10  # 每隔多少个取一个
+        # 使用间隔选择10个数据组
+        selected_data = [groups[i] for i in range(0, len(groups), interval)][:10]
+        # 打印结果
+        for index, group in enumerate(selected_data):
+            print(f'Group {index + 1}: {group}')
+    """
     def __init__(self, ip,port,frame_rate,dir,save):
         os.makedirs(os.path.join(dir, "silab"), exist_ok=True)
         self.frame_rate = frame_rate
         self.timestamp = ''
         self.sensor_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sensor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256*1024)
+        self.sensor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024*1024)
         self.sensor_socket.bind((ip, port))
         self.sensor_socket.listen(1)
         self.conn, addr = self.sensor_socket.accept()
@@ -158,8 +174,8 @@ class CollectSilab:
             self.savedata()
             self.save_event.clear()
     def savedata(self):
-        data = self.conn.recv(99999).decode("utf-8")  # tcp接收
-        print(data)
+        data = self.conn.recv(5000).decode("utf-8")  # tcp接收
+        #print(data)
         data=data[-150:]
         processed_data = []
         for i in range(0, len(data), 15):  # 每15个字符一组
