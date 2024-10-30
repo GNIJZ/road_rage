@@ -1,4 +1,5 @@
 import csv
+import time
 
 # 定义输入和输出文件路径
 input_csv = 'silab_data03.csv'  # 输入的CSV文件路径
@@ -39,6 +40,6 @@ def process_csv(input_file, output_file):
                 writer.writerow(line)
 
 # 执行处理
-process_csv(input_csv, output_csv)
-
-print(f"数据处理完成，结果已保存至: {output_csv}")
+# process_csv(input_csv, output_csv)
+#
+# print(f"数据处理完成，结果已保存至: {output_csv}")

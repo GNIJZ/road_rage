@@ -17,6 +17,7 @@ class CollectImage:
         self.timestamp=''
         self.maintimer = None
         self.imagedata = []
+        self.frames=[]
         self.save = save
         if save:
             os.makedirs(os.path.join(dir, "vision"), exist_ok=True)
@@ -28,28 +29,37 @@ class CollectImage:
                 self.timestamp = time.strftime('%Y%m%d%H%M%S')
                 self.imagedata.append((self.timestamp,frame))
                 if len(self.imagedata) >= 2 and self.save_event.is_set():  # 确保有两帧并且事件被设置
-                    for timestamp, frame in self.imagedata:
-                        print(f"Timestamp: {timestamp}, Frame: {frame.shape}")
+                    # for timestamp, frame in self.imagedata:
+                    #     print(f"Timestamp: {timestamp}, Frame: {frame.shape}")
                     first_frame = self.imagedata[0]
                     last_frame = self.imagedata[len(self.imagedata)//2]
-                    frames = [first_frame, last_frame]
+                    self.frames = [first_frame, last_frame]
                     if self.save:
-                        self.save_data(frames)
-                    else:
-                        self.get_data(frames)
-                    self.imagedata.clear()
+                        self.save_data(self.frames)
                     self.save_event.clear()
+
     def save_data(self,frames):
         for index, (timestamp, frame) in enumerate(frames):
             file_name = f"{timestamp}_{index}.jpg"  # 使用当前帧的时间戳
             file_path = os.path.join(self.save_dir, file_name)  # 保存路径
             cv2.imwrite(file_path, frame)  # 保存图像
-            print(f"图片保存为: {file_name}")  # 打印保存的文件名
-    def get_data(self,frames):
-        if len(frames)>0:
-            return frames
+            # print(f"图片保存为: {file_name}")  # 打印保存的文件名
+        self.frames.clear()
+        self.imagedata.clear()
+
+
+
+    def getdata(self):
+        data = self.frames.copy()  # 返回当前数据的副本
+        self.imagedata.clear()
+        self.frames.clear()  # 清空已处理数据
+        if len(data)>0:
+            return data
         else:
             print("没有图片输出")
+            return []
+
+
     def stop(self):
         self.running = False
         self.cap.release()  # 释放摄像头资源
@@ -75,17 +85,19 @@ class AudioCollector:
         self.running=True
         self.save=save
     def run(self):
-        self.timestamp = time.strftime("%Y%m%d_%H%M%S")  # 设置时间戳
+        self.timestamp = time.strftime("%Y%m%d%H%M%S")  # 设置时间戳
         while self.running:  # 在事件被设置的情况下循环
             try:
                 data = self.stream.read(self.chunk, exception_on_overflow=False)  # 捕获溢出异常
                 if self.save:
-                    self.saveframes.append(data)
+                    self.saveframes.append((time.strftime("%Y%m%d%H%M%S"), data))
                 else:
-                    self.timestamp = time.strftime("%Y%m%d_%H%M%S")  # 设置时间戳
-                    self.frames.append(data)
-                    self.getdata(self.frames)
-                    self.frames.clear()
+                    self.timestamp = time.strftime("%Y%m%d%H%M%S")  # 设置时间戳
+                    self.saveframes.append((time.strftime("%Y%m%d%H%M%S"), data))
+                    if self.save_event.is_set():
+                    # self.frames.append(data)
+                        self.frames.append((self.timestamp, self.saveframes))
+                        self.save_event.clear()
             except IOError as e:  # 捕获输入输出错误
                 print(f"Error reading stream: {e}")
                 break  # 如果发生错误，退出循环
@@ -97,8 +109,12 @@ class AudioCollector:
             wf.setframerate(self.fs)
             wf.writeframes(b''.join(data))
         self.saveframes.clear()
-    def getdata(self, frames):
-        return frames
+    def getdata(self):
+
+        self.saveframes.clear()
+        data = self.frames.copy()  # 返回当前数据的副本
+        self.frames.clear()  # 清空已处理数据
+        return data
     def stop(self):
         self.savedata(self.saveframes)
         self.running=False
@@ -238,7 +254,7 @@ class CollectSilab:
         while self.running:
             self.timestamp = time.strftime('%Y%m%d%H%M%S')
             try:
-                chunk = self.conn.recv(15).decode("utf-8")
+                chunk = self.conn.recv(14).decode("utf-8")
                 if chunk:
                     self.recv_data.append((self.timestamp,chunk))
                 if self.save_event.is_set():
@@ -246,11 +262,12 @@ class CollectSilab:
                         self.process_data = [self.recv_data[i * len(self.recv_data) // 10] for i in range(0, 10)]
                     if self.save:
                         self.savedata(self.process_data)
+                        self.process_data.clear()
+                        self.recv_data.clear()
                     else:
-                        self.getdata(self.process_data)
-                    self.process_data.clear()
+                        self.recv_data.clear()
+                        # self.getdata(self.process_data)
                     self.save_event.clear()
-                    self.recv_data.clear()
             except socket.error as e:
                 print(f"Socket error: {e}")
                 break
@@ -264,10 +281,14 @@ class CollectSilab:
             if len(self.buffered_data) >= 10:
                 self.csv_writer.writerows(self.buffered_data)
                 self.buffered_data.clear()
+    def getdata(self):
+        if len(self.process_data)>9:
+            data=self.process_data.copy()
+            self.process_data.clear()
+            return data
         else:
-            self.buffered_data = processed_data
-    def getdata(self,recv_data):
-        return recv_data
+            print("tcp数据不足")
+            return []
     def stop(self):
         self.running = False
         if self.save:
@@ -280,13 +301,19 @@ class CollectSilab:
 
 if __name__ == '__main__':
 
+
+
+    data1=[]
+    data2=[]
+    data3=[]
+    _Save=False
     directory_path = os.path.join(os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)),"dataset_silab","data","gnij02")
     # 创建目录（如果不存在的话）
     os.makedirs(directory_path, exist_ok=True)
     image_fps = 2  # 图像帧率
-    collectImage = CollectImage(image_fps,dir=directory_path,save=True)
-    collectSilab=CollectSilab("127.0.0.1",8051,10,dir=directory_path,save=True)
-    collectAudio= AudioCollector(dir=directory_path,save=True)
+    collectImage = CollectImage(image_fps,dir=directory_path,save=_Save)
+    collectSilab=CollectSilab("127.0.0.1",8051,10,dir=directory_path,save=_Save)
+    collectAudio= AudioCollector(dir=directory_path,save=_Save)
     # 开启线程
     image_thread = threading.Thread(target=collectImage.run)
     silab_thread = threading.Thread(target=collectSilab.run)
@@ -302,18 +329,42 @@ if __name__ == '__main__':
             # timestamp= time.strftime('%Y%m%d%H%M%S')
             # print(timestamp)
             current_time = int(time.time())  # 获取 当前的整秒时间
-            print(len(collectSilab.recv_data))
+            # print(len(collectSilab.recv_data))
             if current_time > last_printed_second:  # 检查是否到达下一秒
                 if len(collectImage.imagedata) < 2 or len(collectSilab.recv_data)<10:
-                    # collectImage.imagedata.clear()
-                    # collectSilab.recv_data.clear()
+                    collectImage.imagedata.clear()
+                    collectSilab.recv_data.clear()
+                    collectAudio.saveframes.clear()
+                    collectAudio.frames.clear()
+                    last_printed_second = current_time
                     print("数据不足，等待下一轮")
                     continue  # 继续循环，等待下一秒
                 # collectAudio.timestamp=collectImage.timestamp=collectSilab.timestamp=time.strftime('%Y%m%d%H%M%S')
                 collectImage.save_event.set()  # 设置事件，允许保存图像
                 collectSilab.save_event.set()
                 collectAudio.save_event.set()
-                data=collectImage.imagedata
+                if not _Save:
+                    if len(collectImage.frames) > 1 and len(collectSilab.recv_data) > 9 and len(collectAudio.frames)>0:
+                        data1=collectImage.getdata()
+                        data2=collectSilab.getdata()
+                        data3=collectAudio.getdata()
+                        if len(data1) > 0:
+                            timestamp, frame = data1[0]  # 解包元组
+                            print("图像个数：", len(data1), "  图片时间戳和维度", timestamp, "  ", frame.shape)
+                        else:
+                            print("没有图像数据")
+                        if len(data2) > 0:
+                            timestamp, silab_data = data2[0]  # 解包元组
+                            print("silab个数：", len(data2), "  silab时间戳和维度", timestamp, "  ", silab_data)
+                        else:
+                            print("没有silab数据")
+                        if len(data3) > 0:
+                            timestamp, audio_data = data3[0]  # 解包元组
+                            print("音频个数：", len(data3), "  音频时间戳和维度", timestamp, "  ", audio_data)
+                        else:
+                            print("没有音频数据")
+                        print("/n")
+
                 last_printed_second = current_time  # 更新已打印的秒数
             else:
                 pass
