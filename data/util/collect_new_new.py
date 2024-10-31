@@ -2,6 +2,8 @@ import csv
 
 import cv2
 import keyboard
+import librosa
+import numpy as np
 import pyaudio
 import wave
 import os
@@ -79,11 +81,19 @@ class AudioCollector:
         self.frames=[]
         self.Audio_get=False
     def run(self):
+        buffer=b''
         while self.running:
             try:
                 data = self.stream.read(self.chunk, exception_on_overflow=False)
+                buffer += data  # 将接收到的数据追加到缓冲区
+                # 当缓冲区中的字节数达到 64000 时，处理数据
                 timestamp = time.strftime('%Y%m%d%H%M%S')
-                self.frames_queue.put((timestamp, data))
+                while len(buffer) >= 64000:
+                    chunk_data = buffer[:64000]  # 提取 64000 字节的数据
+                    buffer = buffer[64000:]  # 更新缓冲区
+
+                    self.frames_queue.put((timestamp, chunk_data))  # 将数据放入队列
+                    # self.frames_queue.put(chunk_data)  # 将数据放入队列
                 if self.save:
                     pass
                 else:
@@ -114,6 +124,17 @@ class AudioCollector:
         while not self.frames_queue.empty():
             data.append(self.frames_queue.get())
         return data
+            # 将数据转换为 NumPy 数组
+        # audio_data = np.concatenate([np.frombuffer(frame, dtype=np.int16) for frame in data])
+        #
+        # # 归一化处理
+        # audio_data_float = audio_data.astype(np.float32)
+        # max_value = np.max(np.abs(audio_data_float))
+        # if max_value > 0:
+        #     audio_data_float /= max_value
+        # # 计算 MFCC
+        # mfccs = librosa.feature.mfcc(y=audio_data_float, sr=16000, n_mfcc=13)
+        # return mfccs
 
     def stop(self):
         if self.save:
@@ -123,7 +144,6 @@ class AudioCollector:
         self.stream.stop_stream()
         self.stream.close()
         self.p.terminate()
-
 
 class CollectSilab:
     def __init__(self, ip, port, frame_rate, dir, save):
@@ -196,7 +216,6 @@ class CollectSilab:
         self.conn.close()
         self.sensor_socket.close()
 
-
 def start_threads(collectImage, collectSilab, collectAudio):
     """启动线程"""
     image_thread = threading.Thread(target=collectImage.run)
@@ -208,7 +227,6 @@ def start_threads(collectImage, collectSilab, collectAudio):
     audio_thread.start()
 
     return image_thread, silab_thread, audio_thread
-
 
 def process_data(collectImage, collectSilab, collectAudio):
     """处理采集的数据"""
@@ -230,9 +248,10 @@ def process_data(collectImage, collectSilab, collectAudio):
                 print("没有silab数据")
             if len(data3) > 0:
                 timestamp, audio_data = data3[0]
-                print("音频个数：", len(data3), "  音频时间戳和维度", timestamp, "  ", audio_data)
+                print("音频个数：", len(data3), "  音频时间戳和维度", timestamp, "  ", len(audio_data))
             else:
                 print("没有音频数据")
+            # print(data3.shape)
             print("\n")
             collectImage.Image_get=collectSilab.Silab_get=collectAudio.Audio_get=False
             return
@@ -256,7 +275,8 @@ def main():
         while True:
             current_time = int(time.time())
             if current_time > last_printed_second:
-                if (collectImage.image_queue.qsize() < 2) or (collectSilab.data_queue.qsize() < 10):
+                time.sleep(0.01)  # 可以根据需要调整这个值
+                if (collectImage.image_queue.qsize() < 2) or (collectSilab.data_queue.qsize() < 10 or (collectAudio.frames_queue.qsize() < 1)):
                     # 清空数据
                     collectImage.image_queue.queue.clear()
                     collectSilab.data_queue.queue.clear()  # 清空队列
@@ -268,6 +288,7 @@ def main():
                 # 设置事件以允许保存数据
                 collectImage.save_event.set()
                 collectSilab.save_event.set()
+                time.sleep(0.1)  # 可以根据需要调整这个值
                 collectAudio.save_event.set()
 
                 if not _Save:

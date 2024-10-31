@@ -8,7 +8,7 @@ project_root = os.path.dirname(project_root)
 
 sys.path.append(project_root)
 print(project_root)
-from dataset.clip.voice_data import get_audio
+from data.dataset_BeamNG.clip.voice_data import get_audio
 from util import mfcc_eval
 
 
